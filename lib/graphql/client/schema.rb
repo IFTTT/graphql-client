@@ -22,7 +22,7 @@ module GraphQL
           when GraphQL::ListType
             define_class(definition, irep_node, type.of_type).to_list_type
           else
-            const_get(type.name).define_class(definition, irep_node)
+            get_class(type.name).define_class(definition, irep_node)
           end
 
           irep_node.ast_node.directives.inject(type_klass) do |klass, directive|
@@ -32,6 +32,32 @@ module GraphQL
               klass
             end
           end
+        end
+
+        def get_class(name)
+          class_name = class_name_cache.fetch(name) do
+            raise ArgumentError, "#{name} isn't a previously defined type"
+          end
+
+          const_get(class_name)
+        end
+
+        def set_class(name, klass)
+          class_name = name =~ /^[A-Z]/ ? name : name.camelize
+
+          class_name_cache.each do |key, value|
+            if value == class_name
+              raise ArgumentError,
+                "Class #{class_name} has already been defined by type #{key}"
+            end
+          end
+
+          class_name_cache[name] = class_name
+          const_set(class_name, klass)
+        end
+
+        def class_name_cache
+          @class_name_cache ||= {}
         end
       end
 
@@ -48,7 +74,7 @@ module GraphQL
           next if name.start_with?("__")
           if klass = class_for(schema, type, cache)
             klass.schema_module = mod
-            mod.const_set(name, klass)
+            mod.set_class(name, klass)
           end
         end
 
